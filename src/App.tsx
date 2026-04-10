@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import SignIn from "./pages/AuthPages/SignIn";
-import SignUp from "./pages/AuthPages/SignUp";
+import Register from "./pages/AuthPages/Register";
 // import UserProfiles from "./pages/Store/UserProfiles";
 import AppLayout from "./layout/AppLayout";
 import { ScrollToTop } from "./components/common/ScrollToTop";
@@ -43,6 +43,7 @@ import AccountSettings from "./pages/Settings/AccountSettings";
 import Notifications from "./pages/Settings/Notifications";
 import Security from "./pages/Settings/Security";
 import LogoutPage from "./pages/Settings/LogoutPage";
+import CreateStore from "./pages/Store/CreateStore";
 
 export default function App() {
   return (
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="/marketing/email" element={<EmailMarketing />} />
 
             {/* Store */}
+            <Route path="/store/create-store" element={<CreateStore />} />
             <Route path="/store/store-profile" element={<StoreProfile />} />
             <Route path="/store/shipping" element={<Shipping />} />
             <Route path="/store/payments" element={<Payments />} />
@@ -100,7 +102,7 @@ export default function App() {
 
           {/* Auth */}
           <Route path="/signin" element={<SignIn />} />
-          <Route path="/signup" element={<SignUp />} />
+          <Route path="/register" element={<Register />} />
         </Routes>
       </Router>
     </SidebarProvider>

@@ -194,6 +194,7 @@ const menuItems: MenuItem[] = [
     name: "Store",
     icon: <StoreIcon />,
     subItems: [
+      { name: "Create Store",  path: "/store/create-store" },
       { name: "User Profile", path: "/store/user-profile" },
       { name: "Store Profile", path: "/store/store-profile" },
       { name: "Shipping", path: "/store/shipping" },
@@ -337,7 +338,7 @@ className={`fixed left-0 top-16 z-50 flex h-[calc(100vh-4rem)] flex-col border-r
         }`}
       >
         <Link to="/" onClick={closeMobileSidebar} className="flex items-center gap-3">
-          <img src="/images/logo/Storly-Trasn.png" alt="Logo" width={32} height={32} />
+          <img src="/images/logo/Storly-Trasn.png" alt="Logo" width={32} height={32} className="rounded-xl" />
           {isSidebarOpen && (
             <span className="text-2xl font-semibold text-slate-900">
               Seller Hub
