@@ -87,6 +87,7 @@ export default function AllProducts() {
         ...(filterCategory !== 'All' ? { category: filterCategory } : {}),
       });
       const payload = res?.data ?? (res as any);
+      console.log("payload", payload)
       setProducts(payload?.products ?? []);
       setTotal(payload?.meta?.total ?? 0);
       setHasMore(payload?.meta?.hasMore ?? false);

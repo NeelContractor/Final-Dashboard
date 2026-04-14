@@ -79,15 +79,15 @@ export default function CreateStore() {
     }
   };
 
-  const checklist = [
-    { label: "Store username",  done: !!form.username },
-    { label: "Store name",      done: !!form.name },
-    { label: "Bio / description", done: !!form.bio },
-    { label: "Theme selected",  done: !!form.theme },
-    { label: "Logo URL",        done: !!form.logoUrl },
-    { label: "Social link",     done: !!(form.instagram || form.whatsapp || form.facebook || form.twitter) },
-  ];
-  const progress = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
+  // const checklist = [
+  //   { label: "Store username",  done: !!form.username },
+  //   { label: "Store name",      done: !!form.name },
+  //   { label: "Bio / description", done: !!form.bio },
+  //   { label: "Theme selected",  done: !!form.theme },
+  //   { label: "Logo URL",        done: !!form.logoUrl },
+  //   { label: "Social link",     done: !!(form.instagram || form.whatsapp || form.facebook || form.twitter) },
+  // ];
+  // const progress = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
 
   const tabs = [
     { id: "basic",      label: "Basic Info",   icon: "🏪" },
