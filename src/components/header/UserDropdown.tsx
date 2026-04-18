@@ -1,10 +1,47 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
+import { ApiResponse, User } from "../../types/store";
+import { tokenStorage } from "../../utils/tokenStorage";
+import { userDetails } from "../../services/userService";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const token = tokenStorage.get();
+      if (!token) {
+        navigate("/signin");
+        return;
+      }
+      try {
+        const response: ApiResponse<User> = await userDetails();
+        console.log(response.data)
+        // const stores = response?.data?.stores;
+        // if (!stores || stores.length === 0) {
+        //   navigate("/store/create-store");
+        //   return;
+        // }
+        setUser(response.data);
+      } catch (err: any) {
+        if (err?.status === 401 || err?.message?.toLowerCase().includes("unauthorized")) {
+          tokenStorage.remove();
+          navigate("/signin");
+        } else {
+          setError("Failed to load profile. Please try again.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [navigate]);
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -14,17 +51,23 @@ export default function UserDropdown() {
     setIsOpen(false);
   }
 
+  console.log(user)
+
   return (
     <div className="relative">
       <button
         onClick={toggleDropdown}
         className="flex items-center text-gray-700 dropdown-toggle dark:text-gray-400"
       >
-        <span className="mr-3 overflow-hidden rounded-full h-11 w-11">
-          <img src="/images/user/owner.jpg" alt="User" />
+        <span className="mr-3 h-11 w-11 rounded-full overflow-hidden shrink-0">
+          <img
+            src={user?.profileImage ?? "/assets/user-32.png"}
+            alt="User"
+            className="h-full w-full object-cover block"
+          />
         </span>
 
-        <span className="block mr-1 font-medium text-theme-sm">Musharof</span>
+        <span className="block mr-1 font-medium text-theme-sm">{user?.name ?? "No Username"}</span>
         <svg
           className={`stroke-gray-500 dark:stroke-gray-400 transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
@@ -52,10 +95,10 @@ export default function UserDropdown() {
       >
         <div>
           <span className="block font-medium text-gray-700 text-theme-sm dark:text-gray-400">
-            Musharof Chowdhury
+            {user?.name ?? "No Username"}
           </span>
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
-            randomuser@pimjo.com
+            {user?.email ?? "No Email"}
           </span>
         </div>
 
@@ -64,7 +107,7 @@ export default function UserDropdown() {
             <DropdownItem
               onItemClick={closeDropdown}
               tag="a"
-              to="/profile"
+              to="/store/store-profile"
               className="flex items-center gap-3 px-3 py-2 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
             >
               <svg
@@ -82,7 +125,7 @@ export default function UserDropdown() {
                   fill=""
                 />
               </svg>
-              Edit profile
+              Edit Store Profile
             </DropdownItem>
           </li>
 

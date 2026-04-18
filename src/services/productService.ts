@@ -21,7 +21,7 @@ import type {
 
 const PAGE_SIZE = 10;
 
-// GET /rest/stores/{username}/products  — filters sent as request body
+// GET /rest/stores/{username}/products?page=1&pageSize=10&category=...&featured=...
 export const getProducts = (
     username: string,
     filters?: {
@@ -30,17 +30,18 @@ export const getProducts = (
         category?: string;
         featured?: boolean;
     }
-): Promise<ApiResponse<GetAllProducts>> =>
-    api(ENDPOINTS.GET_PRODUCTS(username), {
+): Promise<ApiResponse<GetAllProducts>> => {
+    const params = new URLSearchParams();
+    params.set("page",     String(filters?.page     ?? 1));
+    params.set("pageSize", String(filters?.pageSize ?? PAGE_SIZE));
+    if (filters?.category !== undefined) params.set("category", filters.category);
+    if (filters?.featured !== undefined) params.set("featured", String(filters.featured));
+ 
+    return api(`${ENDPOINTS.GET_PRODUCTS(username)}?${params.toString()}`, {
         method: "GET",
         requiresAuth: true,
-        body: {
-            page:     filters?.page     ?? 1,
-            pageSize: filters?.pageSize ?? PAGE_SIZE,
-            ...(filters?.category !== undefined ? { category: filters.category } : {}),
-            ...(filters?.featured !== undefined ? { featured: filters.featured } : {}),
-        },
     });
+};
 
 // GET /rest/stores/{username}/products/{slug}
 export const getProductBySlug = (

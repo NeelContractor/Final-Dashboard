@@ -3,6 +3,7 @@
 export const ENDPOINTS = {
     // Auth
     LOGIN: "/api/v1/rest/auth/login",
+    LOGOUT: "/api/v1/rest/logout",
     REGISTER: "/api/v1/rest/auth/register",
 
     // User

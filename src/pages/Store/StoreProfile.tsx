@@ -1,563 +1,385 @@
-import { useState } from "react";
+// src/pages/Store/StoreProfile.tsx
 
-type StoreProfileData = {
-  storeName: string;
-  businessCategory: string;
-  supportEmail: string;
-  phone: string;
-  website: string;
-  gstNumber: string;
-  address: string;
-  description: string;
-  startYear: string;
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { updateStore } from "../../services/storeService";
+import { useAppStore } from "../../store/useAppStore";
+import type { Store, CreateStoreBody } from "../../types/store";
+import PageBreadcrumb from "../../components/common/PageBreadCrumb";
+import PageMeta from "../../components/common/PageMeta";
+
+const THEMES = [
+  { id: "MINIMAL_LIGHT", label: "Minimal Light", icon: "☀️" },
+  { id: "MINIMAL_DARK",  label: "Minimal Dark",  icon: "🌙" },
+  { id: "BOLD_LIGHT",    label: "Bold Light",    icon: "🎨" },
+  { id: "BOLD_DARK",     label: "Bold Dark",     icon: "🎨" },
+  { id: "CLASSIC",       label: "Classic",       icon: "🏛️" },
+];
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-IN", {
+    year: "numeric", month: "short", day: "numeric",
+  });
+}
+
+type DraftStore = {
+  name: string; bio: string; logoUrl: string; bannerUrl: string; theme: string;
+  instagram: string; whatsapp: string; facebook: string; twitter: string;
 };
 
-const initialProfile: StoreProfileData = {
-  storeName: "Storly",
-  businessCategory: "Lifestyle & Electronics",
-  supportEmail: "support@storly.com",
-  phone: "+91 98765 43210",
-  website: "www.storly.com",
-  gstNumber: "27ABCDE1234F1Z5",
-  address: "Mumbai, Maharashtra, India",
-  description:
-    "Storly is a modern ecommerce seller brand focused on electronics, fashion, and everyday lifestyle essentials.",
-  startYear: "2023",
-};
+function storeToDraft(store: Store): DraftStore {
+  return {
+    name:      store.name,
+    bio:       store.bio      ?? "",
+    logoUrl:   store.logoUrl  ?? "",
+    bannerUrl: store.bannerUrl ?? "",
+    theme:     store.theme    ?? "MINIMAL_LIGHT",
+    instagram: store.socialLinks?.instagram ?? "",
+    whatsapp:  store.socialLinks?.whatsapp  ?? "",
+    facebook:  store.socialLinks?.facebook  ?? "",
+    twitter:   store.socialLinks?.twitter   ?? "",
+  };
+}
 
 export default function StoreProfile() {
-  const [profile, setProfile] = useState<StoreProfileData>(initialProfile);
-  const [draft, setDraft] = useState<StoreProfileData>(initialProfile);
-  const [isEditing, setIsEditing] = useState(false);
+  const navigate  = useNavigate();
+  const location  = useLocation();
 
-  const storeAgeYears = Math.max(0, new Date().getFullYear() - Number(profile.startYear));
+  // ── Read from global store — zero network calls on mount ──────────────────
+  const { stores, activeStore: globalActive, setActiveStore, updateStoreInList, authStatus } = useAppStore();
 
-  const stats = [
-    {
-      label: "Store Rating",
-      value: "4.8",
-      subtext: "Average customer rating",
-      color: "#2563eb",
-      bg: "#eff6ff",
-      icon: "⭐",
-    },
-    {
-      label: "Products Live",
-      value: "126",
-      subtext: "Active listings",
-      color: "#16a34a",
-      bg: "#f0fdf4",
-      icon: "🛍",
-    },
-    {
-      label: "Profile Views",
-      value: "18.4K",
-      subtext: "Monthly visitors",
-      color: "#d97706",
-      bg: "#fffbeb",
-      icon: "👁",
-    },
-    {
-      label: "Store Age",
-      value: `${storeAgeYears} yrs`,
-      subtext: `Started in ${profile.startYear}`,
-      color: "#9333ea",
-      bg: "#faf5ff",
-      icon: "🏪",
-    },
-  ];
+  const passedUsername: string | undefined = (location.state as any)?.storeUsername;
 
-  const handleChange = (field: keyof StoreProfileData, value: string) => {
-    setDraft((prev) => ({ ...prev, [field]: value }));
+  // Resolve which store to show: prefer location.state username, else globalActive, else first
+  const resolvedStore: Store | null =
+    (passedUsername && stores.find((s) => s.username === passedUsername)) ||
+    globalActive ||
+    stores[0] ||
+    null;
+
+  const [activeStore, setLocalActive] = useState<Store | null>(resolvedStore);
+  const [draft,       setDraft]       = useState<DraftStore | null>(resolvedStore ? storeToDraft(resolvedStore) : null);
+  const [isEditing,   setIsEditing]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [saveError,   setSaveError]   = useState<string | null>(null);
+
+  // If stores load after render (edge case: landing directly on this page)
+  useEffect(() => {
+    if (!activeStore && resolvedStore) {
+      setLocalActive(resolvedStore);
+      setDraft(storeToDraft(resolvedStore));
+    }
+  }, [resolvedStore]);
+
+  const switchStore = (store: Store) => {
+    if (isEditing) return;
+    setLocalActive(store);
+    setDraft(storeToDraft(store));
+    setActiveStore(store);         // keep global in sync
+    setSaveError(null);
   };
 
   const handleEdit = () => {
-    setDraft(profile);
+    if (activeStore) setDraft(storeToDraft(activeStore));
     setIsEditing(true);
+    setSaveError(null);
   };
 
   const handleCancel = () => {
-    setDraft(profile);
+    if (activeStore) setDraft(storeToDraft(activeStore));
     setIsEditing(false);
+    setSaveError(null);
   };
 
-  const handleSave = () => {
-    setProfile(draft);
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!activeStore || !draft) return;
+    setSaving(true);
+    setSaveError(null);
+
+    const body: Partial<CreateStoreBody> = {
+      name: draft.name, bio: draft.bio,
+      logoUrl: draft.logoUrl, bannerUrl: draft.bannerUrl, theme: draft.theme,
+      socialLinks: {
+        instagram: draft.instagram, whatsapp: draft.whatsapp,
+        facebook: draft.facebook,   twitter: draft.twitter,
+      },
+    };
+
+    try {
+      const response = await updateStore(activeStore.username, body);
+      const updated: Store = { ...activeStore, ...response.data };
+
+      setLocalActive(updated);
+      setDraft(storeToDraft(updated));
+      updateStoreInList(updated);   // ← updates Zustand; UserProfiles sees it instantly
+      setIsEditing(false);
+    } catch (err: any) {
+      setSaveError(err?.message || "Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const updateDraft = (field: keyof DraftStore, value: string) =>
+    setDraft((prev) => prev ? { ...prev, [field]: value } : prev);
+
+  // ── Loading / error guards ────────────────────────────────────────────────
+  if (authStatus === "loading" || authStatus === "idle") {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500 dark:text-gray-400 text-sm">Loading store profile...</p>
+      </div>
+    );
+  }
+
+  if (!activeStore || !draft) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-red-500 text-sm">Store not found.</p>
+      </div>
+    );
+  }
+
+  const inp =
+    "w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition-all";
 
   return (
     <>
-      <style>{`
-        * {
-          box-sizing: border-box;
-        }
+      <PageMeta title="Store Profile | Storly Dashboard" description="Manage your store profile" />
+      <PageBreadcrumb pageTitle="Store Profile" />
 
-        .store-profile-page {
-          min-height: 100vh;
-          padding: 24px;
-          background: #f8fafc;
-          font-family: 'DM Sans', sans-serif;
-        }
+      <div className="space-y-5">
 
-        .store-profile-shell {
-          max-width: 1400px;
-          margin: 0 auto;
-        }
-
-        .page-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 16px;
-          margin-bottom: 24px;
-          flex-wrap: wrap;
-        }
-
-        .page-header h1 {
-          margin: 0;
-          font-size: 30px;
-          line-height: 1.2;
-          font-weight: 700;
-          color: #0f172a;
-        }
-
-        .page-header p {
-          margin: 6px 0 0;
-          font-size: 15px;
-          color: #64748b;
-        }
-
-        .header-actions {
-          display: flex;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-
-        .primary-btn,
-        .secondary-btn {
-          border: none;
-          cursor: pointer;
-          font-family: inherit;
-          transition: all 0.2s ease;
-        }
-
-        .primary-btn:hover,
-        .secondary-btn:hover {
-          transform: translateY(-1px);
-        }
-
-        .primary-btn {
-          padding: 12px 18px;
-          border-radius: 12px;
-          background: linear-gradient(135deg, #2563eb, #1d4ed8);
-          color: #fff;
-          font-size: 14px;
-          font-weight: 700;
-          box-shadow: 0 10px 20px rgba(37, 99, 235, 0.22);
-        }
-
-        .secondary-btn {
-          padding: 12px 16px;
-          border-radius: 12px;
-          border: 1px solid #dbe4f0;
-          background: #fff;
-          color: #334155;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .stats-grid {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
-        .card {
-          background: #fff;
-          border-radius: 18px;
-          padding: 20px;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
-          min-width: 0;
-        }
-
-        .stat-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 12px;
-          margin-bottom: 12px;
-        }
-
-        .stat-label {
-          font-size: 14px;
-          color: #64748b;
-          font-weight: 500;
-        }
-
-        .stat-icon {
-          width: 42px;
-          height: 42px;
-          border-radius: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 18px;
-          flex-shrink: 0;
-        }
-
-        .stat-value {
-          font-size: 30px;
-          font-weight: 700;
-          line-height: 1.1;
-          word-break: break-word;
-        }
-
-        .stat-subtext {
-          font-size: 13px;
-          color: #94a3b8;
-          margin-top: 6px;
-        }
-
-        .card-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 18px;
-          flex-wrap: wrap;
-        }
-
-        .card-title {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 700;
-          color: #0f172a;
-        }
-
-        .pill {
-          font-size: 12px;
-          font-weight: 700;
-          padding: 6px 10px;
-          border-radius: 999px;
-          background: #eff6ff;
-          color: #2563eb;
-          white-space: nowrap;
-        }
-
-        .business-card {
-          margin-bottom: 24px;
-        }
-
-        .fields-grid {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 18px;
-        }
-
-        .field-label {
-          display: block;
-          margin-bottom: 8px;
-          font-size: 13px;
-          font-weight: 600;
-          color: #475569;
-        }
-
-        .input,
-        .textarea,
-        .readonly,
-        .readonly-block {
-          width: 100%;
-          border-radius: 12px;
-          font-size: 14px;
-          color: #0f172a;
-        }
-
-        .input,
-        .textarea {
-          padding: 11px 12px;
-          border: 1.5px solid #dbe3ef;
-          outline: none;
-          background: #fff;
-          font-family: inherit;
-        }
-
-        .textarea {
-          min-height: 110px;
-          resize: vertical;
-        }
-
-        .readonly {
-          padding: 11px 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-        }
-
-        .readonly-block {
-          padding: 14px 12px;
-          border: 1px solid #e2e8f0;
-          background: #f8fafc;
-          line-height: 1.6;
-        }
-
-        .section-gap {
-          margin-top: 18px;
-        }
-
-        .bottom-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-          gap: 16px;
-        }
-
-        .info-list {
-          display: grid;
-          gap: 14px;
-        }
-
-        .info-row {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 0;
-          border-bottom: 1px solid #f1f5f9;
-        }
-
-        .info-row:last-child {
-          border-bottom: none;
-          padding-bottom: 0;
-        }
-
-        .info-label {
-          font-size: 14px;
-          color: #64748b;
-        }
-
-        .info-value {
-          font-size: 14px;
-          font-weight: 700;
-          color: #0f172a;
-          text-align: right;
-        }
-
-        @media (max-width: 1200px) {
-          .stats-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-        }
-
-        @media (max-width: 900px) {
-          .store-profile-page {
-            padding: 18px;
-          }
-
-          .fields-grid,
-          .bottom-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .page-header h1 {
-            font-size: 26px;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .store-profile-page {
-            padding: 14px;
-          }
-
-          .stats-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .page-header {
-            flex-direction: column;
-            align-items: stretch;
-          }
-
-          .header-actions {
-            width: 100%;
-          }
-
-          .header-actions button {
-            flex: 1;
-          }
-
-          .info-row {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .info-value {
-            text-align: left;
-          }
-        }
-
-        @media (max-width: 480px) {
-          .page-header h1 {
-            font-size: 22px;
-          }
-
-          .page-header p {
-            font-size: 14px;
-          }
-
-          .card {
-            padding: 16px;
-            border-radius: 14px;
-          }
-
-          .primary-btn,
-          .secondary-btn {
-            width: 100%;
-          }
-        }
-      `}</style>
-
-      <div className="store-profile-page">
-        <div className="store-profile-shell">
-          <div className="page-header">
-            <div>
-              <h1>Store Profile</h1>
-              <p>Manage your storefront identity, business information, and brand details</p>
+        {/* ── Store Switcher ── */}
+        {stores.length > 1 && (
+          <div className="bg-white dark:bg-white/[0.03] rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
+              Switch store
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {stores.map((store) => (
+                <button
+                  key={store.id}
+                  onClick={() => switchStore(store)}
+                  disabled={isEditing}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm font-semibold transition-all ${
+                    activeStore.username === store.username
+                      ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-blue-300 dark:hover:border-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  }`}
+                >
+                  {store.logoUrl
+                    ? <img src={store.logoUrl} alt="" className="w-5 h-5 rounded-md object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    : <span className="text-xs">🏪</span>}
+                  {store.name}
+                </button>
+              ))}
             </div>
-
-            {!isEditing ? (
-              <button className="primary-btn" onClick={handleEdit}>
-                Edit Profile
-              </button>
-            ) : (
-              <div className="header-actions">
-                <button className="secondary-btn" onClick={handleCancel}>
-                  Cancel
-                </button>
-                <button className="primary-btn" onClick={handleSave}>
-                  Save Changes
-                </button>
-              </div>
+            {isEditing && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                Save or cancel your changes before switching stores.
+              </p>
             )}
           </div>
+        )}
 
-          <div className="stats-grid">
-            {stats.map((item) => (
-              <div key={item.label} className="card">
-                <div className="stat-top">
-                  <span className="stat-label">{item.label}</span>
-                  <div className="stat-icon" style={{ background: item.bg }}>
-                    {item.icon}
+        {/* ── Header ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">{activeStore.name}</h2>
+            <p className="text-sm text-gray-400 dark:text-gray-500">
+              storly.co.in/{activeStore.username} · Created {formatDate(activeStore.createdAt)}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {!isEditing ? (
+              <>
+                <button onClick={() => navigate("/store/create-store")}
+                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  + New store
+                </button>
+                <button onClick={handleEdit}
+                  className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors shadow-md shadow-blue-200 dark:shadow-none">
+                  Edit profile
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={handleCancel}
+                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  Cancel
+                </button>
+                <button onClick={handleSave} disabled={saving}
+                  className={`px-4 py-2 rounded-xl text-white text-sm font-semibold transition-colors shadow-md shadow-blue-200 dark:shadow-none ${
+                    saving ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+                  }`}>
+                  {saving ? "Saving..." : "Save changes"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {saveError && (
+          <div className="px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm">
+            {saveError}
+          </div>
+        )}
+
+        {/* ── Main grid ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Basic Info */}
+            <Section title="Store details" badge={isEditing ? "Editing" : undefined}>
+              <div className="space-y-4">
+                <Field label="Store name">
+                  {isEditing
+                    ? <input value={draft.name} onChange={(e) => updateDraft("name", e.target.value)} className={inp} />
+                    : <ReadonlyField value={activeStore.name} />}
+                </Field>
+                <Field label="Username (URL)">
+                  <ReadonlyField value={`storly.co.in/${activeStore.username}`} muted />
+                  {isEditing && <p className="text-xs text-gray-400 mt-1">Store URL cannot be changed after creation.</p>}
+                </Field>
+                <Field label="Bio / description">
+                  {isEditing
+                    ? <textarea value={draft.bio} onChange={(e) => updateDraft("bio", e.target.value)}
+                        rows={4} maxLength={500} className={`${inp} resize-y leading-relaxed`} />
+                    : <ReadonlyField value={activeStore.bio || "—"} />}
+                </Field>
+              </div>
+            </Section>
+
+            {/* Appearance */}
+            <Section title="Appearance">
+              <div className="space-y-4">
+                <Field label="Theme">
+                  {isEditing ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {THEMES.map((t) => (
+                        <button key={t.id} onClick={() => updateDraft("theme", t.id)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                            draft.theme === t.id
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                              : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                          }`}>
+                          <span className="text-base">{t.icon}</span>
+                          <span className="text-xs">{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : <ReadonlyField value={activeStore.theme?.replace(/_/g, " ")} />}
+                </Field>
+                <Field label="Logo URL">
+                  {isEditing
+                    ? <input value={draft.logoUrl} onChange={(e) => updateDraft("logoUrl", e.target.value)}
+                        type="url" placeholder="https://example.com/logo.png" className={inp} />
+                    : <ReadonlyField value={activeStore.logoUrl || "Not set"} muted={!activeStore.logoUrl} />}
+                  {(isEditing ? draft.logoUrl : activeStore.logoUrl) && (
+                    <div className="mt-2 flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <img src={isEditing ? draft.logoUrl : activeStore.logoUrl} alt="Logo preview"
+                        className="w-10 h-10 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <p className="text-xs text-gray-400">Logo preview</p>
+                    </div>
+                  )}
+                </Field>
+                <Field label="Banner URL">
+                  {isEditing
+                    ? <input value={draft.bannerUrl} onChange={(e) => updateDraft("bannerUrl", e.target.value)}
+                        type="url" placeholder="https://example.com/banner.jpg" className={inp} />
+                    : <ReadonlyField value={activeStore.bannerUrl || "Not set"} muted={!activeStore.bannerUrl} />}
+                  {(isEditing ? draft.bannerUrl : activeStore.bannerUrl) && (
+                    <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                      <img src={isEditing ? draft.bannerUrl : activeStore.bannerUrl} alt="Banner preview"
+                        className="w-full h-20 object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    </div>
+                  )}
+                </Field>
+              </div>
+            </Section>
+
+            {/* Social Links */}
+            <Section title="Social links">
+              <div className="space-y-4">
+                {([
+                  { field: "instagram" as const, label: "Instagram",   prefix: "instagram.com/", placeholder: "yourhandle"    },
+                  { field: "whatsapp"  as const, label: "WhatsApp",    prefix: "+",               placeholder: "911234567890" },
+                  { field: "facebook"  as const, label: "Facebook",    prefix: "facebook.com/",   placeholder: "yourpage"     },
+                  { field: "twitter"   as const, label: "Twitter / X", prefix: "x.com/",          placeholder: "yourhandle"   },
+                ]).map(({ field, label, prefix, placeholder }) => (
+                  <Field key={field} label={label}>
+                    {isEditing ? (
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-medium select-none whitespace-nowrap" style={{ pointerEvents: "none" }}>
+                          {prefix}
+                        </span>
+                        <input value={draft[field]} onChange={(e) => updateDraft(field, e.target.value)}
+                          placeholder={placeholder} className={inp}
+                          style={{ paddingLeft: `${prefix.length * 7 + 14}px` }} />
+                      </div>
+                    ) : (
+                      <ReadonlyField
+                        value={activeStore.socialLinks?.[field] ? `${prefix}${activeStore.socialLinks[field]}` : "Not set"}
+                        muted={!activeStore.socialLinks?.[field]}
+                      />
+                    )}
+                  </Field>
+                ))}
+              </div>
+            </Section>
+          </div>
+
+          {/* Sidebar */}
+          <div className="space-y-5">
+            <div className="bg-white dark:bg-white/[0.03] rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-4">Store preview</p>
+              <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="relative h-16 bg-gradient-to-r from-blue-400 to-indigo-500">
+                  {(isEditing ? draft.bannerUrl : activeStore.bannerUrl) && (
+                    <img src={isEditing ? draft.bannerUrl : activeStore.bannerUrl} alt="banner"
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  )}
+                  <div className="absolute left-3 -bottom-5 w-10 h-10 rounded-xl bg-white dark:bg-gray-800 border-2 border-white dark:border-gray-800 shadow overflow-hidden flex items-center justify-center text-sm z-10">
+                    {(isEditing ? draft.logoUrl : activeStore.logoUrl)
+                      ? <img src={isEditing ? draft.logoUrl : activeStore.logoUrl} alt="logo"
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      : "🏪"}
                   </div>
                 </div>
-                <div className="stat-value" style={{ color: item.color }}>
-                  {item.value}
+                <div className="px-3 pt-7 pb-3 bg-white dark:bg-slate-800">
+                  <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                    {(isEditing ? draft.name : activeStore.name) || "Store name"}
+                  </p>
+                  <p className="text-xs text-gray-400 truncate">storly.co.in/{activeStore.username}</p>
+                  {(isEditing ? draft.bio : activeStore.bio) && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 line-clamp-2">
+                      {isEditing ? draft.bio : activeStore.bio}
+                    </p>
+                  )}
+                  <div className="mt-2 flex gap-1 flex-wrap">
+                    {(isEditing ? draft.instagram : activeStore.socialLinks?.instagram) && <span className="text-[10px] bg-pink-50 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded-full">📸 IG</span>}
+                    {(isEditing ? draft.whatsapp  : activeStore.socialLinks?.whatsapp)  && <span className="text-[10px] bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-1.5 py-0.5 rounded-full">💬 WA</span>}
+                    {(isEditing ? draft.facebook  : activeStore.socialLinks?.facebook)  && <span className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-full">📘 FB</span>}
+                    {(isEditing ? draft.twitter   : activeStore.socialLinks?.twitter)   && <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded-full">🐦 X</span>}
+                  </div>
                 </div>
-                <div className="stat-subtext">{item.subtext}</div>
               </div>
-            ))}
-          </div>
-
-          <div className="card business-card">
-            <div className="card-header">
-              <h3 className="card-title">Business Information</h3>
-              <span className="pill">{isEditing ? "Editing" : "Profile Overview"}</span>
+              <p className="text-[10px] text-gray-400 mt-2.5 text-center">Updates live as you edit</p>
             </div>
 
-            <div className="fields-grid">
-              <Field
-                label="Store Name"
-                value={isEditing ? draft.storeName : profile.storeName}
-                editing={isEditing}
-                onChange={(value) => handleChange("storeName", value)}
-              />
-              <Field
-                label="Business Category"
-                value={isEditing ? draft.businessCategory : profile.businessCategory}
-                editing={isEditing}
-                onChange={(value) => handleChange("businessCategory", value)}
-              />
-              <Field
-                label="Support Email"
-                value={isEditing ? draft.supportEmail : profile.supportEmail}
-                editing={isEditing}
-                onChange={(value) => handleChange("supportEmail", value)}
-              />
-              <Field
-                label="Phone"
-                value={isEditing ? draft.phone : profile.phone}
-                editing={isEditing}
-                onChange={(value) => handleChange("phone", value)}
-              />
-              <Field
-                label="Website"
-                value={isEditing ? draft.website : profile.website}
-                editing={isEditing}
-                onChange={(value) => handleChange("website", value)}
-              />
-              <Field
-                label="GST Number"
-                value={isEditing ? draft.gstNumber : profile.gstNumber}
-                editing={isEditing}
-                onChange={(value) => handleChange("gstNumber", value)}
-              />
-              <Field
-                label="Start Year"
-                value={isEditing ? draft.startYear : profile.startYear}
-                editing={isEditing}
-                onChange={(value) => handleChange("startYear", value)}
-              />
-            </div>
-
-            <div className="section-gap">
-              <Field
-                label="Business Address"
-                value={isEditing ? draft.address : profile.address}
-                editing={isEditing}
-                onChange={(value) => handleChange("address", value)}
-              />
-            </div>
-
-            <div className="section-gap">
-              <label className="field-label">Store Description</label>
-              {isEditing ? (
-                <textarea
-                  className="textarea"
-                  value={draft.description}
-                  onChange={(e) => handleChange("description", e.target.value)}
-                />
-              ) : (
-                <div className="readonly-block">{profile.description}</div>
-              )}
-            </div>
-          </div>
-
-          <div className="bottom-grid">
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Brand Summary</h3>
-              </div>
-
-              <div className="info-list">
-                <InfoRow label="Public Store Name" value={profile.storeName} />
-                <InfoRow label="Primary Category" value={profile.businessCategory} />
-                <InfoRow label="Support Contact" value={profile.supportEmail} />
-                <InfoRow label="Business Phone" value={profile.phone} />
-                <InfoRow label="Website" value={profile.website} />
-                <InfoRow label="Store Age" value={`${storeAgeYears} years`} />
-              </div>
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <h3 className="card-title">Store Health</h3>
-              </div>
-
-              <div className="info-list">
-                <InfoRow label="Verification Status" value="Verified" valueColor="#16a34a" />
-                <InfoRow label="Catalog Status" value="Healthy" valueColor="#2563eb" />
-                <InfoRow label="Customer Trust Score" value="High" valueColor="#d97706" />
-                <InfoRow label="Seller Tier" value="Gold" valueColor="#9333ea" />
+            <div className="bg-white dark:bg-white/[0.03] rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-4">Store info</p>
+              <div className="space-y-0">
+                <SideRow label="Store ID"  value={activeStore.id.slice(0, 8) + "..."} />
+                <SideRow label="Username"  value={activeStore.username} />
+                <SideRow label="Theme"     value={activeStore.theme?.replace(/_/g, " ")} />
+                <SideRow label="Created"   value={formatDate(activeStore.createdAt)} />
               </div>
             </div>
           </div>
@@ -567,41 +389,44 @@ export default function StoreProfile() {
   );
 }
 
-type FieldProps = {
-  label: string;
-  value: string;
-  editing: boolean;
-  onChange: (value: string) => void;
-};
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-function Field({ label, value, editing, onChange }: FieldProps) {
+function Section({ title, badge, children }: { title: string; badge?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="field-label">{label}</label>
-      {editing ? (
-        <input className="input" value={value} onChange={(e) => onChange(e.target.value)} />
-      ) : (
-        <div className="readonly">{value}</div>
-      )}
+    <div className="bg-white dark:bg-white/[0.03] rounded-2xl border border-gray-200 dark:border-gray-800 p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>
+        {badge && <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">{badge}</span>}
+      </div>
+      {children}
     </div>
   );
 }
 
-function InfoRow({
-  label,
-  value,
-  valueColor = "#0f172a",
-}: {
-  label: string;
-  value: string;
-  valueColor?: string;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="info-row">
-      <span className="info-label">{label}</span>
-      <span className="info-value" style={{ color: valueColor }}>
-        {value}
-      </span>
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function ReadonlyField({ value, muted }: { value: string; muted?: boolean }) {
+  return (
+    <div className={`w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 text-sm ${
+      muted ? "text-gray-400 dark:text-gray-500" : "text-gray-900 dark:text-white"
+    }`}>
+      {value}
+    </div>
+  );
+}
+
+function SideRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center gap-3 py-2.5 border-b border-gray-100 dark:border-gray-800 last:border-0">
+      <span className="text-xs text-gray-500 dark:text-gray-400">{label}</span>
+      <span className="text-xs font-semibold text-gray-900 dark:text-white text-right truncate max-w-[60%]">{value}</span>
     </div>
   );
 }
