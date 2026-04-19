@@ -30,3 +30,9 @@ export const login = (data: LoginParams): Promise<ApiResponse<User>> =>
         method: "POST",
         body: data,
     });
+
+export const logout = () =>
+    api(ENDPOINTS.LOGOUT, {
+        method: "POST",
+        requiresAuth: true,
+    });
