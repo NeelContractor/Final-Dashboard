@@ -23,7 +23,7 @@ const Home: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 p-4">
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
         <div className="xl:col-span-2"><WelcomeCard /></div>
         <div className="xl:col-span-1"><StatCards /></div>

@@ -9,7 +9,7 @@ import { SidebarProvider } from "./context/SidebarContext";
 
 import AllProducts from "./pages/Products/AllProducts";
 import AddProduct from "./pages/Products/AddProducts";
-import Categories from "./pages/Products/Categories";
+// import Categories from "./pages/Products/Categories";
 import Inventory from "./pages/Products/Inventory";
 import LowStock from "./pages/Products/LowStock";
 
@@ -44,6 +44,7 @@ import Notifications from "./pages/Settings/Notifications";
 import Security from "./pages/Settings/Security";
 import LogoutPage from "./pages/Settings/LogoutPage";
 import CreateStore from "./pages/Store/CreateStore";
+import Categories from "./pages/Categories/Categories";
 
 export default function App() {
   return (

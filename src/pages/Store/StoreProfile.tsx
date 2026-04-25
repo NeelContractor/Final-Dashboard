@@ -144,7 +144,7 @@ export default function StoreProfile() {
     "w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 transition-all";
 
   return (
-    <>
+    <div className="p-4">
       <PageMeta title="Store Profile | Storly Dashboard" description="Manage your store profile" />
       <PageBreadcrumb pageTitle="Store Profile" />
 
@@ -385,7 +385,7 @@ export default function StoreProfile() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

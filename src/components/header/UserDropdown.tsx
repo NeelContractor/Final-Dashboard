@@ -1,12 +1,20 @@
 import { useState } from "react";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
-import { Link } from "react-router";
+import { useNavigate } from "react-router";
 import { useAppStore } from "../../store/useAppStore";
+import { tokenStorage } from "../../utils/tokenStorage";
+import { logout } from "../../services/authService";
+import { useProductStore } from "../../store/useProductStore";
+import Button from "../ui/button/Button";
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useAppStore();
+
+  const navigate       = useNavigate();
+  const clearApp       = useAppStore(s => s.clear);
+  const invalidateAll  = useProductStore(s => s.invalidateAll);
 
   function toggleDropdown() {
     setIsOpen(!isOpen);
@@ -15,6 +23,19 @@ export default function UserDropdown() {
   function closeDropdown() {
     setIsOpen(false);
   }
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      // best-effort — even if the API fails, clear local state
+    } finally {
+      tokenStorage.remove();
+      clearApp();          // wipe user / stores from Zustand
+      invalidateAll();     // wipe product cache
+      navigate("/signin");
+    }
+  };
 
   return (
     <div className="relative">
@@ -119,12 +140,14 @@ export default function UserDropdown() {
           </li>
         </ul>
 
-        <Link
-          to="/signin"
+        <Button
           className="flex items-center gap-3 px-3 py-2 mt-3 font-medium text-gray-700 rounded-lg group text-theme-sm hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-gray-300"
+          onClick={() => {
+            handleLogout()
+          }}
         >
           <svg
-            className="fill-gray-500 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
+            className="fill-gray-100 dark:fill-gray-400 group-hover:fill-gray-700 dark:group-hover:fill-gray-300"
             width="24"
             height="24"
             viewBox="0 0 24 24"
@@ -139,7 +162,7 @@ export default function UserDropdown() {
             />
           </svg>
           Sign out
-        </Link>
+        </Button>
       </Dropdown>
     </div>
   );

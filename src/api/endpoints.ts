@@ -19,6 +19,13 @@ export const ENDPOINTS = {
     CREATE_PRODUCT: (username: string) => `/api/v1/rest/stores/${username}/products`,
     UPDATE_PRODUCT: (username: string, slug: string) => `/api/v1/rest/stores/${username}/products/${slug}`,
 
+    // Categories
+    GET_CATEGORIES: (storeUsername: string) => `/api/v1/categories/${storeUsername}`,
+    CREATE_CATEGORY: (storeUsername: string) => `/api/v1/categories/${storeUsername}`,
+    UPDATE_CATEGORY: (id: number) => `/api/v1/categories/${id}`,
+    ACTIVATE_CATEGORY: (id: number) => `/api/v1/categories/${id}/activate`,
+    DEACTIVATE_CATEGORY: (id: number) => `/api/v1/categories/${id}/deactivate`,
+
     // Store
     GET_STORE: (username: string) => `/api/v1/rest/stores/${username}`,
     CREATE_STORE: `/api/v1/rest/stores`,

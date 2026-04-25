@@ -4,31 +4,32 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createProduct } from '../../services/productService';
 import { userDetails } from '../../services/userService';
+import { useCategoryStore } from '../../store/useCategoryStore';
+// import CategorySelector from '../../components/categories/CategorySelector';
 import type { Store } from '../../types/store';
+import CategorySelector from '../Categories/CategorySelector';
 
 const inp = "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500 dark:focus:ring-blue-900/30 dark:placeholder:text-slate-500";
 const lbl = "block text-sm font-semibold text-slate-700 mb-1.5 dark:text-slate-300";
 
-const categories = ['Electronics', 'Clothing', 'Home & Kitchen', 'Books', 'Beauty', 'Sports', 'Toys', 'Automotive', 'Stationery', 'Other'];
-
 interface FormData {
-  name: string;
-  slug: string;
-  description: string;
-  category: string;
-  tags: string;
-  imageUrl: string;
-  images: string;
-  price: string;
+  name:           string;
+  slug:           string;
+  description:    string;
+  categoryIds:    number[];
+  tags:           string;
+  imageUrl:       string;
+  images:         string;
+  price:          string;
   compareAtPrice: string;
-  currency: string;
-  stockCount: string;
-  inStock: boolean;
-  isFeatured: boolean;
+  currency:       string;
+  stockCount:     string;
+  inStock:        boolean;
+  isFeatured:     boolean;
 }
 
 const emptyForm = (): FormData => ({
-  name: '', slug: '', description: '', category: '',
+  name: '', slug: '', description: '', categoryIds: [],
   tags: '', imageUrl: '', images: '', price: '', compareAtPrice: '', currency: 'INR',
   stockCount: '', inStock: true, isFeatured: false,
 });
@@ -39,10 +40,10 @@ const autoSlug = (name: string) =>
 export default function AddProduct() {
   const navigate = useNavigate();
 
-  const [stores, setStores]               = useState<Store[]>([]);
-  const [activeStore, setActiveStore]     = useState<Store | null>(null);
+  const [stores, setStores]           = useState<Store[]>([]);
+  const [activeStore, setActiveStore] = useState<Store | null>(null);
   const [storeDropdown, setStoreDropdown] = useState(false);
-  const [initError, setInitError]         = useState<string | null>(null);
+  const [initError, setInitError]     = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'basic' | 'pricing' | 'inventory'>('basic');
   const [dragOver, setDragOver]   = useState(false);
@@ -51,6 +52,13 @@ export default function AddProduct() {
   const [form, setForm]           = useState<FormData>(emptyForm());
 
   const storeUsername = activeStore?.username ?? '';
+
+  // Pre-warm the category cache as soon as we know the store username
+  const { fetchCategories } = useCategoryStore();
+  useEffect(() => {
+    if (storeUsername) fetchCategories(storeUsername);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeUsername]);
 
   useEffect(() => {
     const init = async () => {
@@ -80,8 +88,7 @@ export default function AddProduct() {
 
   const handleNameChange = (name: string) => {
     setForm(prev => ({
-      ...prev,
-      name,
+      ...prev, name,
       slug: prev.slug === '' || prev.slug === autoSlug(prev.name) ? autoSlug(name) : prev.slug,
     }));
   };
@@ -89,7 +96,7 @@ export default function AddProduct() {
   const validate = (): string | null => {
     if (!form.name.trim())                      { setActiveTab('basic');     return 'Product name is required.'; }
     if (!form.slug.trim())                      { setActiveTab('basic');     return 'Slug is required.'; }
-    if (!form.category.trim())                  { setActiveTab('basic');     return 'Category is required.'; }
+    if (form.categoryIds.length === 0)          { setActiveTab('basic');     return 'At least one category is required.'; }
     if (!form.price || Number(form.price) <= 0) { setActiveTab('pricing');   return 'Selling price must be greater than 0.'; }
     if (!form.stockCount)                       { setActiveTab('inventory'); return 'Stock count is required.'; }
     return null;
@@ -107,7 +114,7 @@ export default function AddProduct() {
         name:           form.name.trim(),
         slug:           form.slug.trim(),
         description:    form.description.trim(),
-        category:       form.category.trim(),
+        categoryIds:    form.categoryIds,
         price:          Number(form.price),
         compareAtPrice: Number(form.compareAtPrice) || 0,
         currency:       form.currency,
@@ -132,7 +139,7 @@ export default function AddProduct() {
 
   const checklist = [
     { label: 'Product name',      done: !!form.name },
-    { label: 'Category selected', done: !!form.category },
+    { label: 'Category selected', done: form.categoryIds.length > 0 },
     { label: 'Slug added',        done: !!form.slug },
     { label: 'Selling price set', done: !!form.price },
     { label: 'Stock quantity',    done: !!form.stockCount },
@@ -173,61 +180,34 @@ export default function AddProduct() {
           </button>
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Add New Product</h1>
-
-            {stores.length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Loading store...</p>
-            )}
-            {stores.length === 1 && (
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Adding to @{storeUsername}</p>
-            )}
+            {stores.length === 0 && <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">Loading store...</p>}
+            {stores.length === 1 && <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Adding to @{storeUsername}</p>}
             {stores.length > 1 && (
               <div className="relative mt-1.5">
-                <button
-                  onClick={() => setStoreDropdown(v => !v)}
-                  className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                >
-                  {activeStore?.logoUrl && (
-                    <img src={activeStore.logoUrl} alt=""
-                      className="w-4 h-4 rounded-full object-cover"
-                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                  )}
+                <button onClick={() => setStoreDropdown(v => !v)}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  {activeStore?.logoUrl && <img src={activeStore.logoUrl} alt="" className="w-4 h-4 rounded-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
                   <span className="text-slate-700 dark:text-slate-200 font-semibold">{activeStore?.name}</span>
                   <span className="text-slate-400 dark:text-slate-500 text-xs">@{activeStore?.username}</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 rounded-md px-1.5 py-0.5 font-semibold">
-                    {stores.length} stores
-                  </span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 rounded-md px-1.5 py-0.5 font-semibold">{stores.length} stores</span>
                   <span className="text-slate-400 text-xs">▾</span>
                 </button>
-
                 {storeDropdown && (
                   <>
                     <div className="fixed inset-0 z-[100]" onClick={() => setStoreDropdown(false)} />
                     <div className="absolute top-full left-0 mt-1.5 z-[101] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl py-1.5 min-w-[260px]">
-                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pt-2 pb-1">
-                        Add product to
-                      </p>
+                      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pt-2 pb-1">Add product to</p>
                       {stores.map(store => (
-                        <button
-                          key={store.id}
-                          onClick={() => switchStore(store)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors
-                            ${activeStore?.id === store.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-                        >
+                        <button key={store.id} onClick={() => switchStore(store)}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${activeStore?.id === store.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                           <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                            {store.logoUrl
-                              ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover"
-                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                              : <span className="text-base">🏪</span>}
+                            {store.logoUrl ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} /> : <span className="text-base">🏪</span>}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-semibold truncate ${activeStore?.id === store.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                              {store.name}
-                            </p>
+                            <p className={`text-sm font-semibold truncate ${activeStore?.id === store.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{store.name}</p>
                             <p className="text-xs text-slate-400 dark:text-slate-500 truncate">@{store.username}</p>
                           </div>
-                          {activeStore?.id === store.id && (
-                            <span className="text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">✓</span>
-                          )}
+                          {activeStore?.id === store.id && <span className="text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">✓</span>}
                         </button>
                       ))}
                     </div>
@@ -244,16 +224,13 @@ export default function AddProduct() {
             Cancel
           </button>
           <button onClick={handlePublish} disabled={saving || !storeUsername}
-            className={`px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-all shadow-md shadow-blue-200 flex items-center gap-2
-              ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
-            {saving
-              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</>
-              : '🚀 Publish'}
+            className={`px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-all shadow-md shadow-blue-200 flex items-center gap-2 ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+            {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</> : '🚀 Publish'}
           </button>
         </div>
       </div>
 
-      {/* ── Global error banner ── */}
+      {/* ── Error banner ── */}
       {error && (
         <div className="mb-5 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 text-sm flex items-center justify-between">
           <span>⚠️ {error}</span>
@@ -264,19 +241,15 @@ export default function AddProduct() {
       {/* ── Two-column layout ── */}
       <div className="flex flex-col lg:flex-row gap-5">
 
-        {/* ── LEFT: Main form ── */}
+        {/* LEFT: Main form */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
 
           {/* Tabs */}
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-1.5 flex gap-1 overflow-x-auto">
             {tabs.map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 min-w-[80px] flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all
-                  ${activeTab === tab.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
+                className={`flex-1 min-w-[80px] flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                <span>{tab.icon}</span><span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -288,44 +261,38 @@ export default function AddProduct() {
               <div className="space-y-4">
                 <div>
                   <label className={lbl}>Product Name <span className="text-red-500">*</span></label>
-                  <input value={form.name} onChange={e => handleNameChange(e.target.value)}
-                    placeholder="e.g. Wireless Bluetooth Earbuds Pro" className={inp} />
+                  <input value={form.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Wireless Bluetooth Earbuds Pro" className={inp} />
                 </div>
                 <div>
                   <label className={lbl}>Slug <span className="text-red-500">*</span></label>
-                  <input value={form.slug} onChange={e => update('slug', e.target.value)}
-                    placeholder="wireless-bluetooth-earbuds-pro" className={`${inp} font-mono text-blue-600 dark:text-blue-400`} />
+                  <input value={form.slug} onChange={e => update('slug', e.target.value)} placeholder="wireless-bluetooth-earbuds-pro" className={`${inp} font-mono text-blue-600 dark:text-blue-400`} />
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Auto-generated from name · must be unique</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={lbl}>Category <span className="text-red-500">*</span></label>
-                    <select value={form.category} onChange={e => update('category', e.target.value)} className={inp}>
-                      <option value="">Select category</option>
-                      {categories.map(c => <option key={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={lbl}>Tags <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(comma separated)</span></label>
-                    <input value={form.tags} onChange={e => update('tags', e.target.value)}
-                      placeholder="wireless, earbuds, bluetooth" className={inp} />
-                  </div>
+
+                {/* Multi-select category picker */}
+                <CategorySelector
+                  storeUsername={storeUsername}
+                  selectedIds={form.categoryIds}
+                  onChange={ids => update('categoryIds', ids)}
+                  allowCreate
+                  required
+                />
+
+                <div>
+                  <label className={lbl}>Tags <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(comma separated)</span></label>
+                  <input value={form.tags} onChange={e => update('tags', e.target.value)} placeholder="wireless, earbuds, bluetooth" className={inp} />
                 </div>
                 <div>
                   <label className={lbl}>Description</label>
-                  <textarea value={form.description} onChange={e => update('description', e.target.value)}
-                    placeholder="Describe your product in detail..." rows={5}
-                    className={`${inp} resize-y leading-relaxed`} />
+                  <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Describe your product in detail..." rows={5} className={`${inp} resize-y leading-relaxed`} />
                 </div>
                 <div>
                   <label className={lbl}>Main Image URL</label>
-                  <input value={form.imageUrl} onChange={e => update('imageUrl', e.target.value)}
-                    placeholder="https://example.com/image.jpg" className={inp} />
+                  <input value={form.imageUrl} onChange={e => update('imageUrl', e.target.value)} placeholder="https://example.com/image.jpg" className={inp} />
                 </div>
                 <div>
                   <label className={lbl}>Additional Images <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(comma separated URLs)</span></label>
-                  <input value={form.images} onChange={e => update('images', e.target.value)}
-                    placeholder="https://img1.com, https://img2.com" className={inp} />
+                  <input value={form.images} onChange={e => update('images', e.target.value)} placeholder="https://img1.com, https://img2.com" className={inp} />
                 </div>
               </div>
             </div>
@@ -341,16 +308,14 @@ export default function AddProduct() {
                     <label className={lbl}>Selling Price (₹) <span className="text-red-500">*</span></label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-bold text-sm">₹</span>
-                      <input value={form.price} onChange={e => update('price', e.target.value)}
-                        placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
+                      <input value={form.price} onChange={e => update('price', e.target.value)} placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
                     </div>
                   </div>
                   <div>
                     <label className={lbl}>MRP / Original Price (₹)</label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-bold text-sm">₹</span>
-                      <input value={form.compareAtPrice} onChange={e => update('compareAtPrice', e.target.value)}
-                        placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
+                      <input value={form.compareAtPrice} onChange={e => update('compareAtPrice', e.target.value)} placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
                     </div>
                   </div>
                 </div>
@@ -359,9 +324,7 @@ export default function AddProduct() {
                     <span className="text-2xl">🎉</span>
                     <div>
                       <p className="text-base font-bold text-green-700 dark:text-green-400">{discount}% OFF</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Customers save ₹{(Number(form.compareAtPrice) - Number(form.price)).toLocaleString()}
-                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Customers save ₹{(Number(form.compareAtPrice) - Number(form.price)).toLocaleString()}</p>
                     </div>
                   </div>
                 )}
@@ -393,13 +356,11 @@ export default function AddProduct() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={lbl}>Available Stock <span className="text-red-500">*</span></label>
-                    <input value={form.stockCount} onChange={e => update('stockCount', e.target.value)}
-                      placeholder="0" type="number" min="0" className={inp} />
+                    <input value={form.stockCount} onChange={e => update('stockCount', e.target.value)} placeholder="0" type="number" min="0" className={inp} />
                   </div>
                   <div>
                     <label className={lbl}>Availability</label>
-                    <select value={form.inStock ? 'true' : 'false'}
-                      onChange={e => update('inStock', e.target.value === 'true')} className={inp}>
+                    <select value={form.inStock ? 'true' : 'false'} onChange={e => update('inStock', e.target.value === 'true')} className={inp}>
                       <option value="true">✅ In Stock</option>
                       <option value="false">❌ Out of Stock</option>
                     </select>
@@ -410,7 +371,7 @@ export default function AddProduct() {
           )}
         </div>
 
-        {/* ── RIGHT: Sidebar ── */}
+        {/* RIGHT: Sidebar */}
         <div className="w-full lg:w-[300px] xl:w-[320px] shrink-0 flex flex-col gap-4">
 
           {/* Image preview */}
@@ -418,18 +379,14 @@ export default function AddProduct() {
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Product Images</h3>
             {form.imageUrl ? (
               <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 mb-3">
-                <img src={form.imageUrl} alt="Preview" className="w-full h-40 object-cover"
-                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <img src={form.imageUrl} alt="Preview" className="w-full h-40 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               </div>
             ) : (
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); setDragOver(false); }}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-3
-                  ${dragOver
-                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 hover:border-blue-300'}`}>
+                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-3 ${dragOver ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 hover:border-blue-300'}`}>
                 <div className="text-4xl mb-2">🖼️</div>
                 <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Add image URL above</p>
                 <p className="text-xs text-slate-400 dark:text-slate-500">or paste it in the Basic Info tab</p>
@@ -444,65 +401,9 @@ export default function AddProduct() {
             <div className="space-y-3">
               <div>
                 <label className={lbl}>Publishing to</label>
-                {stores.length <= 1 ? (
-                  <div className={`${inp} bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 cursor-not-allowed`}>
-                    {storeUsername ? `@${storeUsername}` : 'Loading...'}
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <button
-                      onClick={() => setStoreDropdown(v => !v)}
-                      className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                    >
-                      <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                        {activeStore?.logoUrl
-                          ? <img src={activeStore.logoUrl} alt="" className="w-full h-full object-cover"
-                              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          : <span className="text-xs">🏪</span>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">{activeStore?.name}</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 truncate">@{activeStore?.username}</p>
-                      </div>
-                      <span className="text-slate-400 text-xs shrink-0">▾</span>
-                    </button>
-
-                    {storeDropdown && (
-                      <>
-                        <div className="fixed inset-0 z-[100]" onClick={() => setStoreDropdown(false)} />
-                        <div className="absolute top-full left-0 right-0 mt-1.5 z-[101] bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-xl py-1.5">
-                          <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-4 pt-2 pb-1">
-                            Switch store
-                          </p>
-                          {stores.map(store => (
-                            <button
-                              key={store.id}
-                              onClick={() => switchStore(store)}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors
-                                ${activeStore?.id === store.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
-                            >
-                              <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                                {store.logoUrl
-                                  ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover"
-                                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                                  : <span className="text-base">🏪</span>}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className={`text-sm font-semibold truncate ${activeStore?.id === store.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                                  {store.name}
-                                </p>
-                                <p className="text-xs text-slate-400 dark:text-slate-500 truncate">@{store.username}</p>
-                              </div>
-                              {activeStore?.id === store.id && (
-                                <span className="text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">✓</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                <div className={`${inp} bg-slate-50 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400 cursor-not-allowed`}>
+                  {storeUsername ? `@${storeUsername}` : 'Loading...'}
+                </div>
               </div>
               <div>
                 <label className={lbl}>Currency</label>
@@ -526,21 +427,15 @@ export default function AddProduct() {
               ))}
             </div>
             <div className="mt-3 bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-              <div
-                className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500"
-                style={{ width: `${progress}%` }}
-              />
+              <div className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500" style={{ width: `${progress}%` }} />
             </div>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{progress}% complete</p>
           </div>
 
           {/* Bottom publish button */}
           <button onClick={handlePublish} disabled={saving || !storeUsername}
-            className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition-all flex items-center justify-center gap-2
-              ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200'}`}>
-            {saving
-              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</>
-              : '🚀 Publish Product'}
+            className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200'}`}>
+            {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</> : '🚀 Publish Product'}
           </button>
         </div>
       </div>

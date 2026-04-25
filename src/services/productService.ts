@@ -2,14 +2,6 @@
 
 import { api } from "../api/apiClient";
 import { ENDPOINTS } from "../api/endpoints";
-// import type {
-//     DeleteProductParams,
-//     GetProductBySlugParams,
-//     UpdateProductParams,
-//     CreateProductRequestBody,
-//     GetAllProducts,
-//     ApiResponse,
-// } from "../types/store";
 import type {
     ApiResponse,
     GetAllProducts,
@@ -17,6 +9,7 @@ import type {
     CreateProductRequestBody,
     UpdateProductRequestBody,
     GetProductBySlugParams,
+    CreateCategoriesBody,
 } from "../types/store";
 
 const PAGE_SIZE = 10;
@@ -82,5 +75,56 @@ export const deleteProduct = (
 ): Promise<ApiResponse<void>> =>
     api(ENDPOINTS.DELETE_PRODUCT(username, slug), {
         method: "DELETE",
+        requiresAuth: true,
+    });
+
+// --- Categories
+
+// GET /categories/{storeUsername}
+export const getCategories = (
+    storeUsername: string,
+): Promise<ApiResponse<void>> =>
+    api(ENDPOINTS.GET_CATEGORIES(storeUsername), {
+        method: "GET",
+        requiresAuth: true,
+    });
+
+// POST /categories/{storeUsername}
+export const createCategories = (
+    storeUsername: string,
+    body: CreateCategoriesBody
+): Promise<ApiResponse<void>> =>
+    api(ENDPOINTS.CREATE_CATEGORY(storeUsername), {
+        method: "POST",
+        requiresAuth: true,
+        body
+    });
+
+// PUT /categories/{id}
+export const updateCategories = (
+    id: number,
+    body: CreateCategoriesBody
+): Promise<ApiResponse<void>> =>
+    api(ENDPOINTS.UPDATE_CATEGORY(id), {
+        method: "PUT",
+        requiresAuth: true,
+        body
+    });
+
+// PATCH /categories/{id}/activate
+export const activateCategories = (
+    id: number,
+): Promise<ApiResponse<void>> =>
+    api(ENDPOINTS.ACTIVATE_CATEGORY(id), {
+        method: "PUT", // what should be here in swigger ui it shows patch
+        requiresAuth: true,
+    });
+
+// PATCH /categories/{id}/deactivate
+export const deactivateCategories = (
+    id: number,
+): Promise<ApiResponse<void>> =>
+    api(ENDPOINTS.DEACTIVATE_CATEGORY(id), {
+        method: "PUT", // what should be here in swigger ui it shows patch
         requiresAuth: true,
     });

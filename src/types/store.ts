@@ -79,7 +79,7 @@ export type Product = {
   currency: string;
   imageUrl: string;
   images: string[];
-  category: string;
+  categoryIds: number[];
   inStock: boolean;
   stockCount: number;
   isFeatured: boolean;
@@ -125,7 +125,7 @@ export type LoginParams = {
 export type GetStoreProductsParams = {
   page?: number;
   pageSize?: number;
-  category?: string;
+  category: number[];
   featured?: boolean;
 };
 
@@ -133,7 +133,7 @@ export type GetProductParams = {
   username: string;
   page: number;
   pageSize: number;
-  category: number;
+  category: number[];
   featured: boolean;
 };
 
@@ -156,7 +156,7 @@ export type CreateProductRequestBody = {
   currency: string;
   imageUrl: string;
   images: string[];
-  category: string;
+  categoryIds: number[];
   inStock: boolean;
   stockCount: number;
   isFeatured: boolean;
@@ -178,7 +178,7 @@ export type UpdateProductRequestBody = {
   currency: string;
   imageUrl: string;
   images: string[];
-  category: string;
+  categoryIds: number[];
   inStock: boolean;
   stockCount: number;
   isFeatured: boolean;
@@ -195,3 +195,12 @@ export type DeleteProductRequestBody = {
   username: string;
   slug: string;
 };
+
+export type CreateCategoriesBody = {
+  name: string,
+  slug: string,
+  description: string,
+  imageUrl: string,
+  parentId: number,
+  displayOrder: number
+}

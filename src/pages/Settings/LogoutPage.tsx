@@ -6,6 +6,7 @@ import { logout } from "../../services/authService";
 import { tokenStorage } from "../../utils/tokenStorage";
 import { useAppStore } from "../../store/useAppStore";
 import { useProductStore } from "../../store/useProductStore";
+import { AlertCircle } from 'lucide-react'
 
 export default function LogoutPage() {
   const navigate       = useNavigate();
@@ -34,7 +35,9 @@ export default function LogoutPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl shadow-sm p-6 text-center">
-        <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-red-50 flex items-center justify-center text-2xl">🚪</div>
+        <div className="flex justify-center items-center">
+          <AlertCircle color="red" />
+        </div>
         <h1 className="text-xl font-bold text-slate-900 dark:text-white mb-1">Logout</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Are you sure you want to log out of your account?</p>
 
@@ -57,7 +60,7 @@ export default function LogoutPage() {
           </button>
         </div>
 
-        <p className="text-xs text-slate-400 dark:text-slate-500 mt-5">You'll be securely signed out from this device.</p>
+        {/* <p className="text-xs text-slate-400 dark:text-slate-500 mt-5">You'll be securely signed out from this device.</p> */}
       </div>
     </div>
   );
