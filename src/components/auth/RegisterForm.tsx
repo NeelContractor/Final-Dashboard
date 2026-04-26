@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { EyeCloseIcon, EyeIcon } from "../../icons";
 import Label from "../form/Label";
@@ -6,6 +6,25 @@ import Input from "../form/input/InputField";
 import Checkbox from "../form/input/Checkbox";
 import { register } from "../../services/authService";
 import { tokenStorage } from "../../utils/tokenStorage";
+import CloudinaryUploadWidget from "../../ImageUpload";
+
+// TODO: i have added upload image logic here, check it once
+// TODO: after registation is successed redirst user to /signin page
+// const UW_CONFIG: Record<string, unknown> = {
+//   cloudName:            import.meta.env.VITE_CLOUD_NAME ?? '',
+//   uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET ?? '',
+//   multiple:             false,
+//   clientAllowedFormats: ['image'],
+// };
+
+interface FormData {
+  name:           string;
+  email:          string;
+  mobile:         string;
+  username:       string;
+  password:       string;
+  image:         string;
+}
 
 export default function RegisterForm() {
   const navigate = useNavigate();
@@ -14,7 +33,14 @@ export default function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
+  const UW_CONFIG = useMemo(() => ({
+    cloudName:            import.meta.env.VITE_CLOUD_NAME,
+    uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+    multiple:             false,
+    clientAllowedFormats: ['image'],
+  }), []); // empty deps — env vars never change at runtime
+
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
     mobile: "",
@@ -22,6 +48,13 @@ export default function RegisterForm() {
     password: "",
     image: "",
   });
+
+  const update = <K extends keyof FormData>(field: K, value: FormData[K]) =>
+    setFormData(prev => ({ ...prev, [field]: value }));
+
+  const handleProfileImageUpload = useCallback((url: string) => {
+    setFormData(prev => ({ ...prev, image: url }));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -178,14 +211,25 @@ export default function RegisterForm() {
 
                 <div>
                   <Label>Profile Image URL</Label>
-                  <Input
+                  {/* <Input
                     type="url"
                     id="image"
                     name="image"
                     placeholder="https://example.com/your-photo.jpg"
                     value={formData.image}
                     onChange={handleChange}
-                  />
+                  /> */}
+                  <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleProfileImageUpload} />
+                    {formData.image && (
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                        <img src={formData.image} alt="Main preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => update('image', '')}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >✕</button>
+                      </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-3">

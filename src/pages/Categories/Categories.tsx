@@ -1,6 +1,6 @@
 // src/pages/Products/Categories.tsx
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
@@ -14,9 +14,17 @@ import {
   deactivateCategories,
 } from '../../services/productService';
 import type { Store } from '../../types/store';
+import CloudinaryUploadWidget from '../../ImageUpload';
 
 const inp = "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500 dark:focus:ring-blue-900/30 dark:placeholder:text-slate-500";
 const lbl = "block text-sm font-semibold text-slate-700 mb-1.5 dark:text-slate-300";
+
+// const UW_CONFIG: Record<string, unknown> = {
+//   cloudName:            import.meta.env.VITE_CLOUD_NAME ?? '',
+//   uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET ?? '',
+//   multiple:             false,
+//   clientAllowedFormats: ['image'],
+// };
 
 const autoSlug = (n: string) =>
   n.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -24,8 +32,12 @@ const autoSlug = (n: string) =>
 // ─── Form Dialog ───────────────────────────────────────────────────────────────
 
 interface CategoryForm {
-  name: string; slug: string; description: string;
-  imageUrl: string; parentId: number | null; displayOrder: number;
+  name: string; 
+  slug: string; 
+  description: string;
+  imageUrl: string; 
+  parentId: number | null; 
+  displayOrder: number;
 }
 
 interface CategoryDialogProps {
@@ -47,6 +59,13 @@ function CategoryDialog({ mode, initial, defaultParentId = null, parents, storeU
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState<string | null>(null);
 
+  const UW_CONFIG = useMemo(() => ({
+    cloudName:            import.meta.env.VITE_CLOUD_NAME,
+    uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+    multiple:             false,
+    clientAllowedFormats: ['image'],
+  }), []); // empty deps — env vars never change at runtime
+
   const handleNameChange = (name: string) =>
     setForm(prev => ({ ...prev, name, slug: prev.slug === '' || prev.slug === autoSlug(prev.name) ? autoSlug(name) : prev.slug }));
 
@@ -63,6 +82,13 @@ function CategoryDialog({ mode, initial, defaultParentId = null, parents, storeU
   };
 
   const parentLabel = parents.find(p => p.id === form.parentId)?.name;
+
+  const update = <K extends keyof CategoryForm>(field: K, value: CategoryForm[K]) =>
+    setForm(prev => ({ ...prev, [field]: value }));
+
+  const handleImageUpload = useCallback((url: string) => {
+    setForm(prev => ({ ...prev, imageUrl: url }));
+  }, []);
 
   return createPortal(
     <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4">
@@ -116,7 +142,18 @@ function CategoryDialog({ mode, initial, defaultParentId = null, parents, storeU
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className={lbl}>Image URL <span className="text-slate-400 font-normal text-xs">(optional)</span></label>
-              <input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://example.com/cat.jpg" className={inp} />
+              {/* <input value={form.imageUrl} onChange={e => setForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://example.com/cat.jpg" className={inp} /> */}
+              <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleImageUpload} /> {/** TODO: after clicking upload image button screen freezes */}
+                {form.imageUrl && (
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                    <img src={form.imageUrl} alt="Main preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => update('imageUrl', '')}
+                      className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                    >✕</button>
+                  </div>
+                )}
             </div>
             <div>
               <label className={lbl}>Display Order</label>

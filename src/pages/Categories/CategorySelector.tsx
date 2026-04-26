@@ -218,12 +218,12 @@ export default function CategorySelector({
               <button type="button" onClick={() => navigate('/products/categories')} className="text-blue-600 dark:text-blue-400 underline font-medium">manage categories</button>.
             </p>
           </div>
-          {allowCreate && (
+          {/* {allowCreate && (
             <button type="button" onClick={() => setShowNew(true)}
               className="shrink-0 px-3 py-2 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors">
               + Create
             </button>
-          )}
+          )} */}
         </div>
       )}
 
@@ -288,14 +288,14 @@ export default function CategorySelector({
       )}
 
       {/* ── Inline create form ── */}
-      {showNew && (
+      {/* {showNew && (
         <NewCategoryForm
           storeUsername={storeUsername}
           parents={categories.filter(c => !c.parentId || c.parentId === 0)}
           onCreated={handleCreated}
           onCancel={() => setShowNew(false)}
         />
-      )}
+      )} */}
 
       {selectedIds.length === 0 && fetchState === 'loaded' && (
         <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Select one or more categories above</p>

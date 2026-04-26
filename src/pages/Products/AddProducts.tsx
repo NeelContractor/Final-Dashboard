@@ -1,16 +1,24 @@
-// src/pages/Products/AddProduct.tsx
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createProduct } from '../../services/productService';
 import { userDetails } from '../../services/userService';
 import { useCategoryStore } from '../../store/useCategoryStore';
-// import CategorySelector from '../../components/categories/CategorySelector';
 import type { Store } from '../../types/store';
 import CategorySelector from '../Categories/CategorySelector';
+import CloudinaryUploadWidget from '../../ImageUpload';
 
 const inp = "w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:focus:border-blue-500 dark:focus:ring-blue-900/30 dark:placeholder:text-slate-500";
-const lbl = "block text-sm font-semibold text-slate-700 mb-1.5 dark:text-slate-300";
+const lbl  = "block text-sm font-semibold text-slate-700 mb-1.5 dark:text-slate-300";
+
+// Outside component — never recreated on re-render
+// const UW_CONFIG: Record<string, unknown> = {
+//   cloudName:            import.meta.env.VITE_CLOUD_NAME ?? '',
+//   uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+//   multiple:             false,
+//   clientAllowedFormats: ['image'],
+// };
+
+const MAX_ADDITIONAL_IMAGES = 2; // main image + 2 additional = 3 total
 
 interface FormData {
   name:           string;
@@ -19,7 +27,7 @@ interface FormData {
   categoryIds:    number[];
   tags:           string;
   imageUrl:       string;
-  images:         string;
+  images:         string[];
   price:          string;
   compareAtPrice: string;
   currency:       string;
@@ -30,7 +38,7 @@ interface FormData {
 
 const emptyForm = (): FormData => ({
   name: '', slug: '', description: '', categoryIds: [],
-  tags: '', imageUrl: '', images: '', price: '', compareAtPrice: '', currency: 'INR',
+  tags: '', imageUrl: '', images: [], price: '', compareAtPrice: '', currency: 'INR',
   stockCount: '', inStock: true, isFeatured: false,
 });
 
@@ -40,10 +48,10 @@ const autoSlug = (name: string) =>
 export default function AddProduct() {
   const navigate = useNavigate();
 
-  const [stores, setStores]           = useState<Store[]>([]);
-  const [activeStore, setActiveStore] = useState<Store | null>(null);
+  const [stores, setStores]               = useState<Store[]>([]);
+  const [activeStore, setActiveStore]     = useState<Store | null>(null);
   const [storeDropdown, setStoreDropdown] = useState(false);
-  const [initError, setInitError]     = useState<string | null>(null);
+  const [initError, setInitError]         = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'basic' | 'pricing' | 'inventory'>('basic');
   const [dragOver, setDragOver]   = useState(false);
@@ -53,7 +61,13 @@ export default function AddProduct() {
 
   const storeUsername = activeStore?.username ?? '';
 
-  // Pre-warm the category cache as soon as we know the store username
+  const UW_CONFIG = useMemo(() => ({
+    cloudName:            import.meta.env.VITE_CLOUD_NAME,
+    uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+    multiple:             false,
+    clientAllowedFormats: ['image'],
+  }), []); // empty deps — env vars never change at runtime
+
   const { fetchCategories } = useCategoryStore();
   useEffect(() => {
     if (storeUsername) fetchCategories(storeUsername);
@@ -93,6 +107,22 @@ export default function AddProduct() {
     }));
   };
 
+  // Stable callbacks via useCallback — won't cause widget re-init
+  const handleMainImageUpload = useCallback((url: string) => {
+    setForm(prev => ({ ...prev, imageUrl: url }));
+  }, []);
+
+  const handleAdditionalImageUpload = useCallback((url: string) => {
+    setForm(prev => {
+      if (prev.images.length >= MAX_ADDITIONAL_IMAGES) return prev;
+      return { ...prev, images: [...prev.images, url] };
+    });
+  }, []);
+
+  const removeAdditionalImage = (index: number) => {
+    setForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
+  };
+
   const validate = (): string | null => {
     if (!form.name.trim())                      { setActiveTab('basic');     return 'Product name is required.'; }
     if (!form.slug.trim())                      { setActiveTab('basic');     return 'Slug is required.'; }
@@ -119,7 +149,7 @@ export default function AddProduct() {
         compareAtPrice: Number(form.compareAtPrice) || 0,
         currency:       form.currency,
         imageUrl:       form.imageUrl.trim(),
-        images:         form.images.split(',').map(i => i.trim()).filter(Boolean),
+        images:         form.images,           // already string[], sent as-is
         tags:           form.tags.split(',').map(t => t.trim()).filter(Boolean),
         inStock:        form.inStock,
         stockCount:     Number(form.stockCount) || 0,
@@ -144,6 +174,7 @@ export default function AddProduct() {
     { label: 'Selling price set', done: !!form.price },
     { label: 'Stock quantity',    done: !!form.stockCount },
     { label: 'Description',       done: !!form.description },
+    { label: 'Main image',        done: !!form.imageUrl },
   ];
   const progress = Math.round((checklist.filter(c => c.done).length / checklist.length) * 100);
 
@@ -186,7 +217,10 @@ export default function AddProduct() {
               <div className="relative mt-1.5">
                 <button onClick={() => setStoreDropdown(v => !v)}
                   className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                  {activeStore?.logoUrl && <img src={activeStore.logoUrl} alt="" className="w-4 h-4 rounded-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
+                  {activeStore?.logoUrl && (
+                    <img src={activeStore.logoUrl} alt="" className="w-4 h-4 rounded-full object-cover"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  )}
                   <span className="text-slate-700 dark:text-slate-200 font-semibold">{activeStore?.name}</span>
                   <span className="text-slate-400 dark:text-slate-500 text-xs">@{activeStore?.username}</span>
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 rounded-md px-1.5 py-0.5 font-semibold">{stores.length} stores</span>
@@ -201,7 +235,11 @@ export default function AddProduct() {
                         <button key={store.id} onClick={() => switchStore(store)}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors ${activeStore?.id === store.id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}>
                           <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-700 overflow-hidden flex items-center justify-center shrink-0">
-                            {store.logoUrl ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} /> : <span className="text-base">🏪</span>}
+                            {store.logoUrl
+                              ? <img src={store.logoUrl} alt={store.name} className="w-full h-full object-cover"
+                                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                              : <span className="text-base">🏪</span>
+                            }
                           </div>
                           <div className="min-w-0 flex-1">
                             <p className={`text-sm font-semibold truncate ${activeStore?.id === store.id ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{store.name}</p>
@@ -225,7 +263,10 @@ export default function AddProduct() {
           </button>
           <button onClick={handlePublish} disabled={saving || !storeUsername}
             className={`px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition-all shadow-md shadow-blue-200 flex items-center gap-2 ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
-            {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</> : '🚀 Publish'}
+            {saving
+              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</>
+              : '🚀 Publish'
+            }
           </button>
         </div>
       </div>
@@ -259,17 +300,28 @@ export default function AddProduct() {
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 sm:p-6">
               <h2 className="text-base font-bold text-slate-900 dark:text-white mb-5">Product Information</h2>
               <div className="space-y-4">
+
                 <div>
                   <label className={lbl}>Product Name <span className="text-red-500">*</span></label>
-                  <input value={form.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Wireless Bluetooth Earbuds Pro" className={inp} />
+                  <input
+                    value={form.name}
+                    onChange={e => handleNameChange(e.target.value)}
+                    placeholder="e.g. Wireless Bluetooth Earbuds Pro"
+                    className={inp}
+                  />
                 </div>
+
                 <div>
                   <label className={lbl}>Slug <span className="text-red-500">*</span></label>
-                  <input value={form.slug} onChange={e => update('slug', e.target.value)} placeholder="wireless-bluetooth-earbuds-pro" className={`${inp} font-mono text-blue-600 dark:text-blue-400`} />
+                  <input
+                    value={form.slug}
+                    onChange={e => update('slug', e.target.value)}
+                    placeholder="wireless-bluetooth-earbuds-pro"
+                    className={`${inp} font-mono text-blue-600 dark:text-blue-400`}
+                  />
                   <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Auto-generated from name · must be unique</p>
                 </div>
 
-                {/* Multi-select category picker */}
                 <CategorySelector
                   storeUsername={storeUsername}
                   selectedIds={form.categoryIds}
@@ -280,20 +332,76 @@ export default function AddProduct() {
 
                 <div>
                   <label className={lbl}>Tags <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(comma separated)</span></label>
-                  <input value={form.tags} onChange={e => update('tags', e.target.value)} placeholder="wireless, earbuds, bluetooth" className={inp} />
+                  <input
+                    value={form.tags}
+                    onChange={e => update('tags', e.target.value)}
+                    placeholder="wireless, earbuds, bluetooth"
+                    className={inp}
+                  />
                 </div>
+
                 <div>
                   <label className={lbl}>Description</label>
-                  <textarea value={form.description} onChange={e => update('description', e.target.value)} placeholder="Describe your product in detail..." rows={5} className={`${inp} resize-y leading-relaxed`} />
+                  <textarea
+                    value={form.description}
+                    onChange={e => update('description', e.target.value)}
+                    placeholder="Describe your product in detail..."
+                    rows={5}
+                    className={`${inp} resize-y leading-relaxed`}
+                  />
                 </div>
+
+                {/* ── Main Image Upload ── */}
                 <div>
-                  <label className={lbl}>Main Image URL</label>
-                  <input value={form.imageUrl} onChange={e => update('imageUrl', e.target.value)} placeholder="https://example.com/image.jpg" className={inp} />
+                  <label className={lbl}>Main Image</label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleMainImageUpload} />
+                    {form.imageUrl && (
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                        <img src={form.imageUrl} alt="Main preview" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => update('imageUrl', '')}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >✕</button>
+                      </div>
+                    )}
+                  </div>
+                  {form.imageUrl && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 truncate">{form.imageUrl}</p>
+                  )}
                 </div>
+
+                {/* ── Additional Images (max 2) ── */}
                 <div>
-                  <label className={lbl}>Additional Images <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(comma separated URLs)</span></label>
-                  <input value={form.images} onChange={e => update('images', e.target.value)} placeholder="https://img1.com, https://img2.com" className={inp} />
+                  <label className={lbl}>
+                    Additional Images
+                    <span className="text-slate-400 dark:text-slate-500 font-normal text-xs ml-1.5">
+                      ({form.images.length}/{MAX_ADDITIONAL_IMAGES} · {MAX_ADDITIONAL_IMAGES + 1} total max)
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {form.images.map((url, i) => (
+                      <div key={url} className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                        <img src={url} alt={`Additional ${i + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalImage(i)}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >✕</button>
+                      </div>
+                    ))}
+                    {form.images.length < MAX_ADDITIONAL_IMAGES && (
+                      <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleAdditionalImageUpload} />
+                    )}
+                  </div>
+                  {form.images.length >= MAX_ADDITIONAL_IMAGES && (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
+                      Maximum additional images reached. Remove one to upload another.
+                    </p>
+                  )}
                 </div>
+
               </div>
             </div>
           )}
@@ -308,26 +416,44 @@ export default function AddProduct() {
                     <label className={lbl}>Selling Price (₹) <span className="text-red-500">*</span></label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-bold text-sm">₹</span>
-                      <input value={form.price} onChange={e => update('price', e.target.value)} placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
+                      <input
+                        value={form.price}
+                        onChange={e => update('price', e.target.value)}
+                        placeholder="0.00"
+                        type="number"
+                        min="0"
+                        className={`${inp} pl-7`}
+                      />
                     </div>
                   </div>
                   <div>
                     <label className={lbl}>MRP / Original Price (₹)</label>
                     <div className="relative">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 font-bold text-sm">₹</span>
-                      <input value={form.compareAtPrice} onChange={e => update('compareAtPrice', e.target.value)} placeholder="0.00" type="number" min="0" className={`${inp} pl-7`} />
+                      <input
+                        value={form.compareAtPrice}
+                        onChange={e => update('compareAtPrice', e.target.value)}
+                        placeholder="0.00"
+                        type="number"
+                        min="0"
+                        className={`${inp} pl-7`}
+                      />
                     </div>
                   </div>
                 </div>
+
                 {discount > 0 && (
                   <div className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4">
                     <span className="text-2xl">🎉</span>
                     <div>
                       <p className="text-base font-bold text-green-700 dark:text-green-400">{discount}% OFF</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Customers save ₹{(Number(form.compareAtPrice) - Number(form.price)).toLocaleString()}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Customers save ₹{(Number(form.compareAtPrice) - Number(form.price)).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 )}
+
                 <div>
                   <label className={lbl}>Currency</label>
                   <select value={form.currency} onChange={e => update('currency', e.target.value)} className={inp}>
@@ -335,6 +461,7 @@ export default function AddProduct() {
                     <option value="USD">USD ($) — US Dollar</option>
                   </select>
                 </div>
+
                 {form.price && (
                   <div className="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl p-4">
                     <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">Price Breakdown</p>
@@ -356,14 +483,45 @@ export default function AddProduct() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className={lbl}>Available Stock <span className="text-red-500">*</span></label>
-                    <input value={form.stockCount} onChange={e => update('stockCount', e.target.value)} placeholder="0" type="number" min="0" className={inp} />
+                    <input
+                      value={form.stockCount}
+                      onChange={e => update('stockCount', e.target.value)}
+                      placeholder="0"
+                      type="number"
+                      min="0"
+                      className={inp}
+                    />
                   </div>
                   <div>
                     <label className={lbl}>Availability</label>
-                    <select value={form.inStock ? 'true' : 'false'} onChange={e => update('inStock', e.target.value === 'true')} className={inp}>
+                    <select
+                      value={form.inStock ? 'true' : 'false'}
+                      onChange={e => update('inStock', e.target.value === 'true')}
+                      className={inp}
+                    >
                       <option value="true">✅ In Stock</option>
                       <option value="false">❌ Out of Stock</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* ── isFeatured toggle ── */}
+                <div>
+                  <label className={lbl}>Featured / Sale Event</label>
+                  <div
+                    onClick={() => update('isFeatured', !form.isFeatured)}
+                    className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all select-none ${form.isFeatured ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-700/30 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                    <div className={`w-11 h-6 rounded-full transition-all relative shrink-0 ${form.isFeatured ? 'bg-amber-400' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${form.isFeatured ? 'left-[22px]' : 'left-0.5'}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-bold ${form.isFeatured ? 'text-amber-700 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>
+                        {form.isFeatured ? '⭐ Featured Product' : 'Not Featured'}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Flag for special occasions, events, or sale campaigns
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -377,22 +535,48 @@ export default function AddProduct() {
           {/* Image preview */}
           <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Product Images</h3>
+
+            {/* Main image preview */}
             {form.imageUrl ? (
               <div className="rounded-xl overflow-hidden border border-slate-100 dark:border-slate-700 mb-3">
-                <img src={form.imageUrl} alt="Preview" className="w-full h-40 object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <img
+                  src={form.imageUrl}
+                  alt="Main preview"
+                  className="w-full h-40 object-cover"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
               </div>
             ) : (
               <div
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); setDragOver(false); }}
-                className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all mb-3 ${dragOver ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 hover:border-blue-300'}`}>
+                className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all mb-3 ${dragOver ? 'border-blue-400 bg-blue-50 dark:bg-blue-900/20' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30 hover:border-blue-300'}`}>
                 <div className="text-4xl mb-2">🖼️</div>
-                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Add image URL above</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">or paste it in the Basic Info tab</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">No image yet</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Upload one in the Basic Info tab</p>
               </div>
             )}
-            <p className="text-xs text-slate-400 dark:text-slate-500 text-center">Paste your image URL in the Basic Info tab</p>
+
+            {/* Additional image thumbnails */}
+            {form.images.length > 0 && (
+              <div className="flex gap-2 flex-wrap mt-2">
+                {form.images.map((url, i) => (
+                  <div key={url} className="w-14 h-14 rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700">
+                    <img
+                      src={url}
+                      alt={`Extra ${i + 1}`}
+                      className="w-full h-full object-cover"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400 dark:text-slate-500 text-center mt-3">
+              {form.imageUrl ? '1 main' : '0 main'} + {form.images.length} additional image{form.images.length !== 1 ? 's' : ''}
+            </p>
           </div>
 
           {/* Publish Settings */}
@@ -427,7 +611,10 @@ export default function AddProduct() {
               ))}
             </div>
             <div className="mt-3 bg-slate-100 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
-              <div className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-blue-500 to-green-500 transition-all duration-500"
+                style={{ width: `${progress}%` }}
+              />
             </div>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">{progress}% complete</p>
           </div>
@@ -435,7 +622,10 @@ export default function AddProduct() {
           {/* Bottom publish button */}
           <button onClick={handlePublish} disabled={saving || !storeUsername}
             className={`w-full py-3 rounded-xl text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 ${saving || !storeUsername ? 'bg-slate-400 dark:bg-slate-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-200'}`}>
-            {saving ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</> : '🚀 Publish Product'}
+            {saving
+              ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Publishing...</>
+              : '🚀 Publish Product'
+            }
           </button>
         </div>
       </div>

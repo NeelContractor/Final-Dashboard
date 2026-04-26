@@ -45,7 +45,7 @@ export default function UserDropdown() {
       >
         <span className="mr-3 h-11 w-11 rounded-full overflow-hidden shrink-0">
           <img
-            src={user?.profileImage ?? "/assets/user-32.png"}
+            src={user?.profileImage ?? "/assets/user-32.png"} 
             alt="User"
             className="h-full w-full object-cover block"
           />

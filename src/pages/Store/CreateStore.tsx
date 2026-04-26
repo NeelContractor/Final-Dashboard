@@ -1,8 +1,17 @@
 // src/pages/Store/CreateStore.tsx
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { createStore } from "../../services/storeService";
+import CloudinaryUploadWidget from "../../ImageUpload";
+
+// Outside component — never recreated on re-render
+// const UW_CONFIG: Record<string, unknown> = {
+//   cloudName:            import.meta.env.VITE_CLOUD_NAME ?? '',
+//   uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET ?? '',
+//   multiple:             false,
+//   clientAllowedFormats: ['image'],
+// };
 
 const THEMES = [
   { id: "MINIMAL_LIGHT", label: "Minimal Light", desc: "Clean & airy",        icon: "☀️" },
@@ -44,10 +53,26 @@ export default function CreateStore() {
     twitter: "",
   });
 
+  const UW_CONFIG = useMemo(() => ({
+    cloudName:            import.meta.env.VITE_CLOUD_NAME,
+    uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+    multiple:             false,
+    clientAllowedFormats: ['image'],
+  }), []); // empty deps — env vars never change at runtime
+
   const update = (field: keyof FormData, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
     setError(null);
   };
+
+  // Stable callbacks via useCallback — won't cause widget re-init
+  const handleLogoUpload = useCallback((url: string) => {
+    setForm(prev => ({ ...prev, logoUrl: url }));
+  }, []);
+
+  const handleBannerUpload = useCallback((url: string) => {
+    setForm(prev => ({ ...prev, bannerUrl: url }));
+  }, []);
 
   const handleSubmit = async () => {
     if (!form.username || !form.name) {
@@ -255,48 +280,55 @@ export default function CreateStore() {
                   </div>
                 </div>
 
-                {/* Logo URL */}
+                {/* ── Logo Upload ── */}
                 <div>
-                  <label className={lbl}>Logo URL</label>
-                  <input
-                    value={form.logoUrl}
-                    onChange={(e) => update("logoUrl", e.target.value)}
-                    placeholder="https://example.com/logo.png"
-                    type="url"
-                    className={inp}
-                  />
+                  <label className={lbl}>Store Logo</label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleLogoUpload} />
+                    {form.logoUrl && (
+                      <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shrink-0">
+                        <img
+                          src={form.logoUrl}
+                          alt="Logo preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => update("logoUrl", "")}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                        >✕</button>
+                      </div>
+                    )}
+                  </div>
                   {form.logoUrl && (
-                    <div className="mt-3 flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl border border-slate-200 dark:border-slate-600">
-                      <img
-                        src={form.logoUrl}
-                        alt="Logo preview"
-                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-600"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                      <p className="text-xs text-slate-500 dark:text-slate-400">Logo preview</p>
-                    </div>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 truncate">{form.logoUrl}</p>
                   )}
                 </div>
 
-                {/* Banner URL */}
+                {/* ── Banner Upload ── */}
                 <div>
-                  <label className={lbl}>Banner URL</label>
-                  <input
-                    value={form.bannerUrl}
-                    onChange={(e) => update("bannerUrl", e.target.value)}
-                    placeholder="https://example.com/banner.jpg"
-                    type="url"
-                    className={inp}
-                  />
+                  <label className={lbl}>Store Banner</label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleBannerUpload} />
+                    {form.bannerUrl && (
+                      <div className="relative w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 mt-2">
+                        <img
+                          src={form.bannerUrl}
+                          alt="Banner preview"
+                          className="w-full h-24 object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => update("bannerUrl", "")}
+                          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                        >✕</button>
+                      </div>
+                    )}
+                  </div>
                   {form.bannerUrl && (
-                    <div className="mt-3 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-600">
-                      <img
-                        src={form.bannerUrl}
-                        alt="Banner preview"
-                        className="w-full h-24 object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    </div>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5 truncate">{form.bannerUrl}</p>
                   )}
                 </div>
               </div>

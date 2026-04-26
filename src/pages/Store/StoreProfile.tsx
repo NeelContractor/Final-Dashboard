@@ -1,12 +1,21 @@
 // src/pages/Store/StoreProfile.tsx
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { updateStore } from "../../services/storeService";
 import { useAppStore } from "../../store/useAppStore";
 import type { Store, CreateStoreBody } from "../../types/store";
 import PageBreadcrumb from "../../components/common/PageBreadCrumb";
 import PageMeta from "../../components/common/PageMeta";
+import CloudinaryUploadWidget from "../../ImageUpload";
+
+// Outside component — never recreated on re-render
+// const UW_CONFIG: Record<string, unknown> = {
+//   cloudName:            import.meta.env.VITE_CLOUD_NAME ?? '',
+//   uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET ?? '',
+//   multiple:             false,
+//   clientAllowedFormats: ['image'],
+// };
 
 const THEMES = [
   { id: "MINIMAL_LIGHT", label: "Minimal Light", icon: "☀️" },
@@ -63,6 +72,13 @@ export default function StoreProfile() {
   const [saving,      setSaving]      = useState(false);
   const [saveError,   setSaveError]   = useState<string | null>(null);
 
+  const UW_CONFIG = useMemo(() => ({
+    cloudName:            import.meta.env.VITE_CLOUD_NAME,
+    uploadPreset:         import.meta.env.VITE_UPLOAD_PRESET,
+    multiple:             false,
+    clientAllowedFormats: ['image'],
+  }), []); // empty deps — env vars never change at runtime
+
   // If stores load after render (edge case: landing directly on this page)
   useEffect(() => {
     if (!activeStore && resolvedStore) {
@@ -97,17 +113,38 @@ export default function StoreProfile() {
     setSaveError(null);
 
     const body: Partial<CreateStoreBody> = {
-      name: draft.name, bio: draft.bio,
-      logoUrl: draft.logoUrl, bannerUrl: draft.bannerUrl, theme: draft.theme,
+      username: activeStore.username,
+      name: draft.name, 
+      bio: draft.bio,
+      logoUrl: draft.logoUrl, 
+      bannerUrl: draft.bannerUrl, 
+      theme: draft.theme,
       socialLinks: {
-        instagram: draft.instagram, whatsapp: draft.whatsapp,
-        facebook: draft.facebook,   twitter: draft.twitter,
+        instagram: draft.instagram, 
+        whatsapp: draft.whatsapp,
+        facebook: draft.facebook,   
+        twitter: draft.twitter,
       },
     };
 
     try {
       const response = await updateStore(activeStore.username, body);
-      const updated: Store = { ...activeStore, ...response.data };
+
+      const updated: Store = {
+        ...activeStore,
+        ...response.data,
+        name:      draft.name,
+        bio:       draft.bio,
+        logoUrl:   draft.logoUrl,
+        bannerUrl: draft.bannerUrl,
+        theme:     draft.theme,
+        socialLinks: {
+          instagram: draft.instagram,
+          whatsapp:  draft.whatsapp,
+          facebook:  draft.facebook,
+          twitter:   draft.twitter,
+        },
+      };
 
       setLocalActive(updated);
       setDraft(storeToDraft(updated));
@@ -122,6 +159,15 @@ export default function StoreProfile() {
 
   const updateDraft = (field: keyof DraftStore, value: string) =>
     setDraft((prev) => prev ? { ...prev, [field]: value } : prev);
+
+  // Stable callbacks via useCallback — won't cause widget re-init
+  const handleLogoUpload = useCallback((url: string) => {
+    setDraft((prev) => prev ? { ...prev, logoUrl: url } : prev);
+  }, []);
+
+  const handleBannerUpload = useCallback((url: string) => {
+    setDraft((prev) => prev ? { ...prev, bannerUrl: url } : prev);
+  }, []);
 
   // ── Loading / error guards ────────────────────────────────────────────────
   if (authStatus === "loading" || authStatus === "idle") {
@@ -272,31 +318,79 @@ export default function StoreProfile() {
                     </div>
                   ) : <ReadonlyField value={activeStore.theme?.replace(/_/g, " ")} />}
                 </Field>
-                <Field label="Logo URL">
-                  {isEditing
-                    ? <input value={draft.logoUrl} onChange={(e) => updateDraft("logoUrl", e.target.value)}
-                        type="url" placeholder="https://example.com/logo.png" className={inp} />
-                    : <ReadonlyField value={activeStore.logoUrl || "Not set"} muted={!activeStore.logoUrl} />}
-                  {(isEditing ? draft.logoUrl : activeStore.logoUrl) && (
-                    <div className="mt-2 flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
-                      <img src={isEditing ? draft.logoUrl : activeStore.logoUrl} alt="Logo preview"
-                        className="w-10 h-10 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      <p className="text-xs text-gray-400">Logo preview</p>
+
+                {/* ── Logo ── */}
+                <Field label="Store Logo">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleLogoUpload} />
+                        {draft.logoUrl && (
+                          <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 shrink-0">
+                            <img src={draft.logoUrl} alt="Logo preview"
+                              className="w-full h-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            <button
+                              type="button"
+                              onClick={() => updateDraft("logoUrl", "")}
+                              className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors"
+                            >✕</button>
+                          </div>
+                        )}
+                      </div>
+                      {draft.logoUrl && (
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{draft.logoUrl}</p>
+                      )}
                     </div>
+                  ) : (
+                    <>
+                      <ReadonlyField value={activeStore.logoUrl || "Not set"} muted={!activeStore.logoUrl} />
+                      {activeStore.logoUrl && (
+                        <div className="mt-2 flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700">
+                          <img src={activeStore.logoUrl} alt="Logo preview"
+                            className="w-10 h-10 rounded-lg object-cover border border-gray-200 dark:border-gray-700"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          <p className="text-xs text-gray-400">Logo preview</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </Field>
-                <Field label="Banner URL">
-                  {isEditing
-                    ? <input value={draft.bannerUrl} onChange={(e) => updateDraft("bannerUrl", e.target.value)}
-                        type="url" placeholder="https://example.com/banner.jpg" className={inp} />
-                    : <ReadonlyField value={activeStore.bannerUrl || "Not set"} muted={!activeStore.bannerUrl} />}
-                  {(isEditing ? draft.bannerUrl : activeStore.bannerUrl) && (
-                    <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
-                      <img src={isEditing ? draft.bannerUrl : activeStore.bannerUrl} alt="Banner preview"
-                        className="w-full h-20 object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+
+                {/* ── Banner ── */}
+                <Field label="Store Banner">
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <CloudinaryUploadWidget uwConfig={UW_CONFIG} onUpload={handleBannerUpload} />
+                      </div>
+                      {draft.bannerUrl && (
+                        <div className="relative w-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                          <img src={draft.bannerUrl} alt="Banner preview"
+                            className="w-full h-24 object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          <button
+                            type="button"
+                            onClick={() => updateDraft("bannerUrl", "")}
+                            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center hover:bg-red-600 transition-colors shadow-sm"
+                          >✕</button>
+                        </div>
+                      )}
+                      {draft.bannerUrl && (
+                        <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{draft.bannerUrl}</p>
+                      )}
                     </div>
+                  ) : (
+                    <>
+                      <ReadonlyField value={activeStore.bannerUrl || "Not set"} muted={!activeStore.bannerUrl} />
+                      {activeStore.bannerUrl && (
+                        <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                          <img src={activeStore.bannerUrl} alt="Banner preview"
+                            className="w-full h-20 object-cover"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        </div>
+                      )}
+                    </>
                   )}
                 </Field>
               </div>
